@@ -1,4 +1,3 @@
-
 import requests
 from datetime import datetime
 import time
@@ -63,9 +62,11 @@ def buildIncidentIdentifier(incidentID, yesterday=False):
         if idoy == 0:
             idoy = 365
     year = str(tt.tm_year)
-    yeardig = year[3]
+    #first 2 digits are year, followed by julian day of year, followed by chp issued incident id
+    yeardig1 = year[2]
+    yeardig2 = year[3]
     day_of_year = str(idoy)
-    iid = yeardig + day_of_year + incidentID
+    iid = yeardig1 + yeardig2 + day_of_year + incidentID
     return iid, idoy
 
 
@@ -110,9 +111,9 @@ def storeDetails(data, idx, k):
     conn.close()
 
 def find_special(area, location):
-    special = ["Boulder Creek", "BOULDER CREEK", "Felton", "FELTON", "Ben Lomond", "BEN LOMOND",
-               "Aptos", "APTOS", "Watsonville", "WATSONVILLE", "Woodside", "WOODSIDE",
-               "Los Gatos", "LOS GATOS"]
+    special = ["Boulder Creek", "BOULDER CREEK", "Felton", "FELTON", "Ben Lomond", "BEN LOMOND", "Tehachapi",
+               "Aptos", "APTOS", "Watsonville", "WATSONVILLE", "Woodside", "WOODSIDE", "Paso Robles", "King City",
+               "Los Gatos", "LOS GATOS", "TEHACHAPI", "Healdsburg", "Cloverdale", "Sonora", "Goleta"]
     for item in special:
         if item in location:
             return item

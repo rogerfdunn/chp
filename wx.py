@@ -28,6 +28,7 @@ class Weather:
             'Hanford': 'Hanford',
             'Redding': 'Redding',
             'Williams': 'Williams',
+            'Morongo Basin': 'Joshua Tree National Park',
             'Antelope Valley': 'Antelope Valley',
             'Mount Shasta': 'Mount Shasta',
             'Chico': 'Chico',
@@ -50,7 +51,10 @@ class Weather:
             'Santa Fe Springs': 'Santa Fe Springs',
             'Central LA': 'Los Angeles',
             'Baldwin Park': 'Baldwin Park',
+            'Crescent City': 'Crescent City',
             'LA': 'Los Angeles',
+            'SA': 'Sacramento',
+            'MY': 'Salinas',
             'Mojave': 'Mojave',
             'West Valley': 'Los Angeles',
             'East LA': 'Los Angeles',
@@ -59,16 +63,26 @@ class Weather:
             'South LA': 'Los Angeles',
             'Blythe': 'Blythe',
             'Newhall': 'Newhall',
+            'IC': 'Palm Springs',
+            'FR': 'Fresno',
+            'IN': 'San Bernardino',
             'Clear Lake': 'Clear Lake',
             'Porterville': 'Porterville',
+            'El Centro': 'El Centro',
+            'UK': 'Ukiah',
+            'SLCC': 'San Luis Obispo',
+            'ST': 'Stockton',
+            'EC': 'El Centro',
             'Santa Rosa': 'Santa Rosa',
             'Napa': 'Napa',
             'Visalia': 'Visalia',
             'Castro Valley': 'Castro Valley',
             'Solano': 'Solano',
+            'Healdsburg': 'Healdsburg',
             'Santa Barbara': 'Santa Barbara',
             'Altadena': 'Altadena',
             'Madera': 'Madera',
+            'HM': 'Humboldt',
             'Modesto': 'Modesto',
             'Buttonwillow': 'Buttonwillow',
             'Los Banos': 'Los Banos',
@@ -76,6 +90,7 @@ class Weather:
             'Hollister Gilroy': 'Gilroy',
             'King City': 'King City',
             'Monterey': 'Monterey',
+            'Monterey Dispatch': 'Salinas',
             'Westminster': 'Westminster',
             'Santa Ana': 'Santa Ana',
             'OC': 'Santa Ana',
@@ -96,6 +111,7 @@ class Weather:
             'Tracy': 'Tracy',
             'Quincy': 'Quincy',
             'Susanville': 'Susanville',
+            'CCCC': 'Contra Costa',
             'SU': 'Susanville',
             'Gold Run': 'Gold Run',
             'Ukiah': 'Ukiah',
@@ -103,10 +119,13 @@ class Weather:
             'Yreka': 'Yreka',
             'Truckee': 'Truckee',
             'TK': 'Truckee',
+            'MR': 'Merced',
             'Sonora': 'Sonora',
+            'VTCC': 'Ventura',
             'South Lake': 'South Lake Tahoe',
             "Los Gatos": "Los Gatos",
             "Woodside": "Woodside",
+            "WOODSIDE": "Woodside",
             'Needles': 'Needles',
             'San Bernardino': 'San Bernardino',
             'Santa Maria': 'Santa Maria',
@@ -147,7 +166,9 @@ class Weather:
         return doc
 
     def update_stations(self):
+        print "updating weather station data"
         for station in self.CityDict.values():
+            print "getting {} weather data".format(station)
             doc = self.get_station(station)
             if doc is None:
                 continue
@@ -180,6 +201,3 @@ class Weather:
 
         else:
             return None
-
-
-
