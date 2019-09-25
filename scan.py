@@ -9,6 +9,7 @@ import re
 url = 'http://cad.chp.ca.gov/Traffic.aspx'
 
 dispatchCenters = [
+    'GGCC',  # Golden Gate
     'BFCC',  # Bakersfield
     'BSCC',  # Barstow
     'BICC',  # Bishop
@@ -16,7 +17,6 @@ dispatchCenters = [
     'CHCC',  # Chico
     'ECCC',  # El Centro
     'FRCC',  # Fresno
-    'GGCC',  # Golden Gate
     'HMCC',  # Humbold
     'ICCC',  # Indio
     'INCC',  # Inland
@@ -34,6 +34,33 @@ dispatchCenters = [
     'VTCC',  # Ventura
     'YKCC',  # Yreka
 ]
+
+dispatch_names = {
+    'BFCC': 'Bakersfield',
+    'BSCC': 'Barstow',
+    'BICC': 'Bishop',
+    'BCCC': 'San Diego',
+    'CHCC': 'Chico',
+    'ECCC': 'El Centro',
+    'FRCC': 'Fresno',
+    'GGCC': 'Oakland',
+    'HMCC': 'Shasta',
+    'ICCC': 'Indio',
+    'INCC': 'San Bernardino',
+    'LACC': 'Los Angeles',
+    'MRCC': 'Merced',
+    'MYCC': 'Monterey',
+    'OCCC': 'Santa Ana',
+    'RDCC': 'Redding',
+    'SACC': 'Sacramento',
+    'SLCC': 'San Luis Obispo',
+    'SKCCSTCC': 'Stockton',
+    'SUCC': 'Susanville',
+    'TKCC': 'Truckee',
+    'UKCC': 'Ukiah',
+    'VTCC': 'Ventura',
+    'YKCC': 'Yreka'
+}
 
 # Form data for submission
 #
@@ -54,6 +81,8 @@ levelTwoID = {}
 
 
 # build searchable incident using dispatch incident, unique id for dispatchcenter
+
+
 def buildIncidentIdentifier(incidentID, yesterday=False):
     tt = datetime.now().timetuple()
     idoy = tt.tm_yday
@@ -62,7 +91,7 @@ def buildIncidentIdentifier(incidentID, yesterday=False):
         if idoy == 0:
             idoy = 365
     year = str(tt.tm_year)
-    #first 2 digits are year, followed by julian day of year, followed by chp issued incident id
+    # first 2 digits are year, followed by julian day of year, followed by chp issued incident id
     yeardig1 = year[2]
     yeardig2 = year[3]
     day_of_year = str(idoy)
@@ -93,7 +122,6 @@ def fixupTime():
 # store data into MySQL database
 #
 def storeDetails(data, idx, k):
-
     callCenter = dispatchCenters[idx]
     incidentID, doy = buildIncidentIdentifier(levelTwoID[levelTwoLinks[k]])
 
@@ -104,23 +132,30 @@ def storeDetails(data, idx, k):
     callCenter2 = conn.escape(callCenter)
     incidentID2 = conn.escape(incidentID)
 
-    sql = "UPDATE TBL_Incidents set DetailText = " + data2 + "where dispatchcenter = " + callCenter2 + " and CHPIncidentID = " + incidentID2 + ";"
+    # sql = "select DetailText from TBL_Incidents where dispatchcenter = " + callCenter2 + " and CHPIncidentID = " + incidentID2
+    # cur.execute(sql)
+    # for row in cur:
+    #    result = row[0]
+
+    sql = "UPDATE TBL_Incidents set DetailText = " + data2 + "where dispatchcenter = " + callCenter2 + " and CHPIncidentID = " + incidentID2
     cur.execute(sql)
 
     cur.close()
     conn.close()
 
+
 def find_special(area, location):
     special = ["Boulder Creek", "BOULDER CREEK", "Felton", "FELTON", "Ben Lomond", "BEN LOMOND", "Tehachapi",
                "Aptos", "APTOS", "Watsonville", "WATSONVILLE", "Woodside", "WOODSIDE", "Paso Robles", "King City",
-               "Los Gatos", "LOS GATOS", "TEHACHAPI", "Healdsburg", "Cloverdale", "Sonora", "Goleta"]
+               "Los Gatos", "LOS GATOS", "Tehachapi", "Healdsburg", "Cloverdale", "Sonora", "Goleta", "Baker",
+               "Parker Dam"]
     for item in special:
         if item in location:
             return item
     return area
 
-def ignoreEvent(itype):
 
+def ignoreEvent(itype):
     if itype.startswith(u'Road/Weather'):
         return True
     if itype.startswith(u'CLOSURE of'):
@@ -135,17 +170,25 @@ def ignoreEvent(itype):
         return True
     if itype.startswith(u'Request CalTrans'):
         return True
+    if itype.startswith(u'ESCORT for Road'):
+        return True
+    if itype.startswith(u'SILVER Alert'):
+        return True
+    if itype.startswith(u'Amber Alert'):
+        return True
+    if itype.startswith(u'Hazardous Materials'):
+        return True
+
 
 # store data into MySQL database
 #
 def storeRecord(data, rowIndex):
-
     try:
         itype = data[4]
         loc1 = data[5]
         loc2 = data[6]
         loc3 = data[7]
-        area = loc3
+        area = loc3.lstrip()
         location = loc1 + ' ' + loc2 + ' - ' + loc3
         location = location.replace(u'\xa0', u' ')
         fsp = location[-3:]
@@ -164,6 +207,9 @@ def storeRecord(data, rowIndex):
 
             loctext = location
 
+            if incidentID == '01828':
+                print 'sup'
+
             # used in the form as a parameter to obtain more detail about this incident
             #
             rtext = 'Select$' + str(rowIndex)
@@ -181,7 +227,8 @@ def storeRecord(data, rowIndex):
 
             # Check if this event is already in the database
             #
-            sql = "SELECT COUNT(*) from TBL_Incidents where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(callCenter, iid)
+            sql = "SELECT COUNT(*) from TBL_Incidents where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
+                callCenter, iid)
 
             try:
                 cur.execute(sql)
@@ -205,7 +252,8 @@ def storeRecord(data, rowIndex):
                 siid2 = str(iid2)
                 loc2 = re.escape(loctext.encode('utf-8'))
 
-                sql = "SELECT COUNT(*) FROM TBL_Incidents WHERE dispatchcenter = '{}' and CHPIncidentID='{}' and location = '{}'".format(callCenter, siid2, loc2)
+                sql = "SELECT COUNT(*) FROM TBL_Incidents WHERE dispatchcenter = '{}' and CHPIncidentID='{}' and location = '{}'".format(
+                    callCenter, siid2, loc2)
 
                 try:
                     cur.execute(sql)
@@ -217,12 +265,14 @@ def storeRecord(data, rowIndex):
                 for row in cur:
                     result = row[0]
                 #
-                # Found matching incdent from prior day. Use data to update only
+                # Found matching incident from prior day. Use data to update only
                 #
                 if result == 1:
                     doInsert = False
                     iid = iid2
             area = find_special(area, loc2)
+            if len(area) == 0:
+                area = dispatch_names[callCenter]
             weather_dict = weather.get_wx(area)
             if weather_dict is None:
                 currentTemp = 0
@@ -233,13 +283,15 @@ def storeRecord(data, rowIndex):
             # if not in the database, insert it
             if doInsert:
                 sqla = "insert into TBL_Incidents(currentTemp,currentWeather,startime,endtime,dispatchcenter,CHPIncidentID,type,location, area) values "
-                values = "({},'{}',NOW(),NOW(),'{}','{}','{}','{}','{}');".format(currentTemp, conditions, callCenter, iid, itype, loc2, area)
+                values = "({},'{}',NOW(),NOW(),'{}','{}','{}','{}','{}');".format(currentTemp, conditions, callCenter,
+                                                                                  iid, itype, loc2, area)
                 sql = sqla + values
             else:
-                sql = "UPDATE TBL_Incidents set endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(itype, callCenter, iid)
+                sql = "UPDATE TBL_Incidents set endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
+                    itype, callCenter, iid)
 
-            #saveToFile(sql)
-            #print sql
+            # saveToFile(sql)
+            # print sql
             try:
                 cur.execute(sql)
             except Exception as e:
@@ -251,10 +303,10 @@ def storeRecord(data, rowIndex):
     except Exception as e:
         print e
 
+
 # parse the main html document
 #
 def parseDom(doc, index):
-
     # Extract the data from html, if present
     #
     try:
@@ -282,10 +334,10 @@ def parseDom(doc, index):
     except Exception as e:
         print e
 
-# parse the main html documention
+
+# parse the main html document
 #
 def parseDetails(doc, index, k):
-
     details = ''
     # Extract the data from html, if present
     #
@@ -305,10 +357,10 @@ def parseDetails(doc, index, k):
             details += '\n'
     storeDetails(details, index, k)
 
+
 # main loop
 #
 def extractData():
-
     for index in range(len(dispatchCenters)):
         payload['ddlcomcenter'] = dispatchCenters[index]
         payload['__EVENTTARGET'] = ''
@@ -356,6 +408,7 @@ def extractData():
 
             doc = response.text
             parseDetails(doc, index, k)
+
 
 # early am
 #
