@@ -9,7 +9,7 @@ from DomCollector import DOMCollector
 
 
 class CHPLogger:
-    INCIDENT_TABLE = "TBL_Incidents_two"
+    INCIDENT_TABLE = "TBL_Incidents"
 
     def __init__(self, weather):
 
