@@ -5,459 +5,305 @@ from bs4 import BeautifulSoup
 import pymysql
 from wx import Weather
 import re
-
-url = 'http://cad.chp.ca.gov/Traffic.aspx'
-
-dispatchCenters = [
-    'GGCC',  # Golden Gate
-    'BFCC',  # Bakersfield
-    'BSCC',  # Barstow
-    'BICC',  # Bishop
-    'BCCC',  # Border
-    'CHCC',  # Chico
-    'ECCC',  # El Centro
-    'FRCC',  # Fresno
-    'HMCC',  # Humbold
-    'ICCC',  # Indio
-    'INCC',  # Inland
-    'LACC',  # Los Angeles
-    'MRCC',  # Merced
-    'MYCC',  # Monterey
-    'OCCC',  # Orange
-    'RDCC',  # Redding
-    'SACC',  # Sacramento
-    'SLCC',  # San Luis Obispo
-    'SKCCSTCC',  # Stockton
-    'SUCC',  # Susanville
-    'TKCC',  # Truckee
-    'UKCC',  # Ukiah
-    'VTCC',  # Ventura
-    'YKCC',  # Yreka
-]
-
-dispatch_names = {
-    'BFCC': 'Bakersfield',
-    'BSCC': 'Barstow',
-    'BICC': 'Bishop',
-    'BCCC': 'San Diego',
-    'CHCC': 'Chico',
-    'ECCC': 'El Centro',
-    'FRCC': 'Fresno',
-    'GGCC': 'Oakland',
-    'HMCC': 'Shasta',
-    'ICCC': 'Indio',
-    'INCC': 'San Bernardino',
-    'LACC': 'Los Angeles',
-    'MRCC': 'Merced',
-    'MYCC': 'Monterey',
-    'OCCC': 'Santa Ana',
-    'RDCC': 'Redding',
-    'SACC': 'Sacramento',
-    'SLCC': 'San Luis Obispo',
-    'SKCCSTCC': 'Stockton',
-    'SUCC': 'Susanville',
-    'TKCC': 'Truckee',
-    'UKCC': 'Ukiah',
-    'VTCC': 'Ventura',
-    'YKCC': 'Yreka'
-}
-
-# Form data for submission
-#
-payload = {
-    'ddlcomcenter': 'none',
-    'ListMap': 'radList',
-    'ddlResources': 'Choose One',
-    'ddlSearches': 'Choose One',
-    '__EVENTTARGET': '',
-    '__EVENTARGUMENT': '',
-    '__LASTFOCUS': '',
-}
-
-# This will be used to gather secondary data from incidents. This data may or may not be present on the CHP server.
-#
-levelTwoLinks = []
-levelTwoID = {}
+from DomCollector import DOMCollector
 
 
-# build searchable incident using dispatch incident, unique id for dispatchcenter
+class CHPLogger:
+    INCIDENT_TABLE = "TBL_Incidents_two"
 
+    def __init__(self, weather):
 
-def buildIncidentIdentifier(incidentID, yesterday=False):
-    tt = datetime.now().timetuple()
-    idoy = tt.tm_yday
-    if yesterday:
-        idoy -= 1
-        if idoy == 0:
-            idoy = 365
-    year = str(tt.tm_year)
-    # first 2 digits are year, followed by julian day of year, followed by chp issued incident id
-    yeardig1 = year[2]
-    yeardig2 = year[3]
-    day_of_year = str(idoy)
-    iid = yeardig1 + yeardig2 + day_of_year + incidentID
-    return iid, idoy
+        self.weather = weather
+        self.dispatchCenters = [
+            'GGCC',  # Golden Gate
+            'BFCC',  # Bakersfield
+            'BSCC',  # Barstow
+            'BICC',  # Bishop
+            'BCCC',  # Border
+            'CHCC',  # Chico
+            'ECCC',  # El Centro
+            'FRCC',  # Fresno
+            'HMCC',  # Humbold
+            'ICCC',  # Indio
+            'INCC',  # Inland
+            'LACC',  # Los Angeles
+            'MRCC',  # Merced
+            'MYCC',  # Monterey
+            'OCCC',  # Orange
+            'RDCC',  # Redding
+            'SACC',  # Sacramento
+            'SLCC',  # San Luis Obispo
+            'SKCCSTCC',  # Stockton
+            'SUCC',  # Susanville
+            'TKCC',  # Truckee
+            'UKCC',  # Ukiah
+            'VTCC',  # Ventura
+            'YKCC',  # Yreka
+        ]
 
+        self.dispatch_names = {
+            'BFCC': 'Bakersfield',
+            'BSCC': 'Barstow',
+            'BICC': 'Bishop',
+            'BCCC': 'San Diego',
+            'CHCC': 'Chico',
+            'ECCC': 'El Centro',
+            'FRCC': 'Fresno',
+            'GGCC': 'Oakland',
+            'HMCC': 'Shasta',
+            'ICCC': 'Indio',
+            'INCC': 'San Bernardino',
+            'LACC': 'Los Angeles',
+            'MRCC': 'Merced',
+            'MYCC': 'Monterey',
+            'OCCC': 'Santa Ana',
+            'RDCC': 'Redding',
+            'SACC': 'Sacramento',
+            'SLCC': 'San Luis Obispo',
+            'SKCCSTCC': 'Stockton',
+            'SUCC': 'Susanville',
+            'TKCC': 'Truckee',
+            'UKCC': 'Ukiah',
+            'VTCC': 'Ventura',
+            'YKCC': 'Yreka'
+        }
 
-# For debugging - save a buffer to disk for examination
-#
-def saveToFile(doc):
-    # file_ = open('debug.txt', 'w')
-    # file_.write(doc)
-    # file_.close()
-    pass
+    def extractData(self):
+        domCollector = DOMCollector()
+        all_data = {}
 
+        for dispatch in self.dispatchCenters:
+            all_data[dispatch] = domCollector.GetDispatch(dispatch)
 
-# fixup orphaned end time where incident p
-#
-def fixupTime():
-    conn = pymysql.connect(host='localhost', port=3306, user='mimosa', passwd='mimosa', db='chplog_db', autocommit=True)
-    cur = conn.cursor()
-    sql = "UPDATE TBL_Incidents set endtime = NOW() where startime = endtime;"
-    cur.execute(sql)
-    cur.close()
-    conn.close()
+        for dispatch in self.dispatchCenters:
+            self.store_events(dispatch, all_data[dispatch])
 
+    def ignoreEvent(self, itype):
+        if itype.startswith(u'Road/Weather'):
+            return True
+        if itype.startswith(u'CLOSURE of'):
+            return True
+        if itype.startswith(u'Assist'):
+            return True
+        if itype.startswith(u'Traffic Advisory'):
+            return True
+        if itype.startswith(u'Traffic Hazard'):
+            return True
+        if itype.startswith(u'Report of Fire'):
+            return True
+        if itype.startswith(u'Request CalTrans'):
+            return True
+        if itype.startswith(u'ESCORT for Road'):
+            return True
+        if itype.startswith(u'SILVER Alert'):
+            return True
+        if itype.startswith(u'Amber Alert'):
+            return True
+        if itype.startswith(u'Hazardous Materials'):
+            return True
 
-# store data into MySQL database
-#
-def storeDetails(data, idx, k):
-    callCenter = dispatchCenters[idx]
-    incidentID, doy = buildIncidentIdentifier(levelTwoID[levelTwoLinks[k]])
+    def buildIncidentIdentifier(self, incidentID, yesterday=False):
+        tt = datetime.now().timetuple()
+        idoy = tt.tm_yday
+        if yesterday:
+            idoy -= 1
+            if idoy == 0:
+                idoy = 365
+        year = str(tt.tm_year)
+        # first 2 digits are year, followed by julian day of year, followed by chp issued incident id
+        yeardig1 = year[2]
+        yeardig2 = year[3]
+        day_of_year = str(idoy)
+        iid = yeardig1 + yeardig2 + day_of_year + incidentID
+        return iid, idoy
 
-    conn = pymysql.connect(host='localhost', port=3306, user='mimosa', passwd='mimosa', db='chplog_db', autocommit=True)
-    cur = conn.cursor()
+    def find_special(self, area, location):
+        special = ["Boulder Creek", "BOULDER CREEK", "Felton", "FELTON", "Ben Lomond", "BEN LOMOND", "Tehachapi",
+                   "Aptos", "APTOS", "Watsonville", "WATSONVILLE", "Woodside", "WOODSIDE", "Paso Robles", "King City",
+                   "Los Gatos", "LOS GATOS", "Tehachapi", "Healdsburg", "Cloverdale", "Sonora", "Goleta", "Baker",
+                   "Parker Dam"]
+        # hack to prevent Bakersfield from becoming 'Baker'
+        if area == 'Bakersfield':
+            return area
+        for item in special:
+            if item in location:
+                return item
+        return area
 
-    data2 = conn.escape(data)
-    callCenter2 = conn.escape(callCenter)
-    incidentID2 = conn.escape(incidentID)
+    def store_events(self, dispatch, data_dict):
 
-    # sql = "select DetailText from TBL_Incidents where dispatchcenter = " + callCenter2 + " and CHPIncidentID = " + incidentID2
-    # cur.execute(sql)
-    # for row in cur:
-    #    result = row[0]
-
-    sql = "UPDATE TBL_Incidents set DetailText = " + data2 + "where dispatchcenter = " + callCenter2 + " and CHPIncidentID = " + incidentID2
-    cur.execute(sql)
-
-    cur.close()
-    conn.close()
-
-
-def find_special(area, location):
-    special = ["Boulder Creek", "BOULDER CREEK", "Felton", "FELTON", "Ben Lomond", "BEN LOMOND", "Tehachapi",
-               "Aptos", "APTOS", "Watsonville", "WATSONVILLE", "Woodside", "WOODSIDE", "Paso Robles", "King City",
-               "Los Gatos", "LOS GATOS", "Tehachapi", "Healdsburg", "Cloverdale", "Sonora", "Goleta", "Baker",
-               "Parker Dam"]
-    for item in special:
-        if item in location:
-            return item
-    return area
-
-
-def ignoreEvent(itype):
-    if itype.startswith(u'Road/Weather'):
-        return True
-    if itype.startswith(u'CLOSURE of'):
-        return True
-    if itype.startswith(u'Assist'):
-        return True
-    if itype.startswith(u'Traffic Advisory'):
-        return True
-    if itype.startswith(u'Traffic Hazard'):
-        return True
-    if itype.startswith(u'Report of Fire'):
-        return True
-    if itype.startswith(u'Request CalTrans'):
-        return True
-    if itype.startswith(u'ESCORT for Road'):
-        return True
-    if itype.startswith(u'SILVER Alert'):
-        return True
-    if itype.startswith(u'Amber Alert'):
-        return True
-    if itype.startswith(u'Hazardous Materials'):
-        return True
-
-
-# store data into MySQL database
-#
-def storeRecord(data, rowIndex):
-    try:
-        itype = data[4]
-        loc1 = data[5]
-        loc2 = data[6]
-        loc3 = data[7]
-        area = loc3.lstrip()
-        location = loc1 + ' ' + loc2 + ' - ' + loc3
-        location = location.replace(u'\xa0', u' ')
-        fsp = location[-3:]
-
-        if ignoreEvent(itype):
+        print "Processing {}".format(dispatch)
+        # no current incident data
+        if data_dict is None:
             return
-
-        # no FSP or MAZE/COZE
-        if fsp != 'FSP':
-            conn = pymysql.connect(host='localhost', port=3306, user='mimosa', passwd='mimosa', db='chplog_db',
-                                   autocommit=True)
-            cur = conn.cursor()
-
-            callCenter = data[0]
-            incidentID = data[2]
-
-            loctext = location
-
-            if incidentID == '01828':
-                print 'sup'
-
-            # used in the form as a parameter to obtain more detail about this incident
-            #
-            rtext = 'Select$' + str(rowIndex)
-            global levelTwoID
-            global levelTwoLinks
-
-            levelTwoLinks.append(rtext)
-            levelTwoID[rtext] = incidentID
-
-            # CHP incident ids roll over at midnight, so we are prepending the
-            # julian date as part of the iid for the database
-            # This eliminates incorrect updates going to an older record.
-            #
-            iid, idoy = buildIncidentIdentifier(incidentID)
-
-            # Check if this event is already in the database
-            #
-            sql = "SELECT COUNT(*) from TBL_Incidents where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
-                callCenter, iid)
-
+        conn = pymysql.connect(host='192.168.100.142', port=3306, user='mimosa', passwd='mimosa',
+                               db='chplog_db',
+                               autocommit=True)
+        cur = conn.cursor()
+        for item in data_dict:
             try:
-                cur.execute(sql)
-            except Exception as e:
-                print sql
-                print e
-            result = 0
+                data = data_dict[item]
+                itype = data[3]
+                loc1 = data[4]
+                loc2 = data[5]
+                loc3 = data[6]
+                details = data[7]
+                details = conn.escape(details)
+                area = loc3.lstrip()
+                location = loc1 + ' ' + loc2 + ' - ' + loc3
+                location = location.replace(u'\xa0', u' ')
+                fsp = location[-3:]
+                if self.ignoreEvent(itype):
+                    continue
+                # no FSP or MAZE/COZE
+                if fsp != 'FSP':
+                    callCenter = dispatch
+                    incidentID = data[1]
+                    loctext = location
 
-            for row in cur:
-                result = row[0]
+                    # CHP incident ids roll over at midnight, so we are prepending the
+                    # julian date as part of the iid for the database
+                    # This eliminates incorrect updates going to an older record.
+                    #
+                    iid, idoy = self.buildIncidentIdentifier(incidentID)
 
-            doInsert = False
-
-            # if not in the database, insert it
-            if result == 0:
-                doInsert = True
-                #
-                # Check if this event is a day overlap event. Check incident id, location, dispatch center match for yesterday
-                #
-                iid2, idoy = buildIncidentIdentifier(incidentID, yesterday=True)
-                siid2 = str(iid2)
-                loc2 = re.escape(loctext.encode('utf-8'))
-
-                sql = "SELECT COUNT(*) FROM TBL_Incidents WHERE dispatchcenter = '{}' and CHPIncidentID='{}' and location = '{}'".format(
-                    callCenter, siid2, loc2)
-
-                try:
-                    cur.execute(sql)
-                except Exception as e:
-                    print e
-                    print sql
-                    return
-                result = 0
-                for row in cur:
-                    result = row[0]
-                #
-                # Found matching incident from prior day. Use data to update only
-                #
-                if result == 1:
+                    # Check if this event is already in the database
+                    #
+                    sql = "SELECT COUNT(*) from {} where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
+                        CHPLogger.INCIDENT_TABLE,
+                        callCenter, iid)
+                    try:
+                        cur.execute(sql)
+                    except Exception as e:
+                        continue
+                    result = 0
+                    for row in cur:
+                        result = row[0]
                     doInsert = False
-                    iid = iid2
-            area = find_special(area, loc2)
-            if len(area) == 0:
-                area = dispatch_names[callCenter]
-            weather_dict = weather.get_wx(area)
-            if weather_dict is None:
-                currentTemp = 0
-                conditions = "Unknown station"
-            else:
-                currentTemp = weather_dict["Temperature"]
-                conditions = weather_dict["Conditions"]
-            # if not in the database, insert it
-            if doInsert:
-                sqla = "insert into TBL_Incidents(currentTemp,currentWeather,startime,endtime,dispatchcenter,CHPIncidentID,type,location, area) values "
-                values = "({},'{}',NOW(),NOW(),'{}','{}','{}','{}','{}');".format(currentTemp, conditions, callCenter,
-                                                                                  iid, itype, loc2, area)
-                sql = sqla + values
-            else:
-                sql = "UPDATE TBL_Incidents set endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
-                    itype, callCenter, iid)
 
-            # saveToFile(sql)
-            # print sql
-            try:
-                cur.execute(sql)
+                    # if not in the database, insert it
+                    if result == 0:
+                        doInsert = True
+                        #
+                        # Check if this event is a day overlap event. Check incident id, location, dispatch center match for yesterday
+                        #
+                        iid2, idoy = self.buildIncidentIdentifier(incidentID, yesterday=True)
+                        siid2 = str(iid2)
+                        loc2 = re.escape(loctext.encode('utf-8'))
+
+                        sql = "SELECT COUNT(*) FROM {} WHERE dispatchcenter = '{}' and CHPIncidentID='{}' and location = '{}'".format(
+                            CHPLogger.INCIDENT_TABLE,
+                            callCenter, siid2, loc2)
+                        try:
+                            cur.execute(sql)
+                        except Exception as e:
+                            print e
+                            continue
+                        result = 0
+                        for row in cur:
+                            result = row[0]
+                        #
+                        # Found matching incident from prior day. Use data to update only
+                        #
+                        if result == 1:
+                            doInsert = False
+                            iid = iid2
+                    area = self.find_special(area, loc2)
+                    if len(area) == 0:
+                        area = self.dispatch_names[callCenter]
+                    weather_dict = self.weather.get_wx(area)
+                    if weather_dict is None:
+                        currentTemp = 0
+                        conditions = "Unknown station"
+                    else:
+                        currentTemp = weather_dict["Temperature"]
+                        conditions = weather_dict["Conditions"]
+                    # if not in the database, insert it
+                    if doInsert:
+                        sqla = "insert into {} (currentTemp,currentWeather,startime,endtime,dispatchcenter,CHPIncidentID,type,location, area,DetailText) values ".format(
+                            CHPLogger.INCIDENT_TABLE)
+
+                        values = "({},'{}',NOW(),NOW(),'{}','{}','{}','{}','{}',{});".format(currentTemp, conditions,
+                                                                                          callCenter,
+                                                                                          iid, itype, loc2, area,
+                                                                                          details)
+                        sql = sqla + values
+                    else:
+                        sql = "UPDATE {} set DetailText = {}, endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
+                            CHPLogger.INCIDENT_TABLE,
+                            details, itype, callCenter, iid)
+                    try:
+                        cur.execute(sql)
+                    except Exception as e:
+                        print e.message
+                        continue
             except Exception as e:
-                print e.message
-                print sql
+                print e
 
-            cur.close()
-            conn.close()
-    except Exception as e:
-        print e
+        cur.close()
+        conn.close()
 
-
-# parse the main html document
-#
-def parseDom(doc, index):
-    # Extract the data from html, if present
+    # fixup orphaned end time where incident p
     #
-    try:
-        bs = BeautifulSoup(doc, 'html.parser')
+    def fixupTime(self):
+        conn = pymysql.connect(host='192.168.100.142', port=3306, user='mimosa', passwd='mimosa', db='chplog_db',
+                               autocommit=True)
+        cur = conn.cursor()
+        sql = "UPDATE {} set endtime = NOW() where startime = endtime".format(CHPLogger.INCIDENT_TABLE)
+        cur.execute(sql)
+        cur.close()
+        conn.close()
 
-        # Look for the gvIncidents table
+    # early am
+    #
+    def isEarlyAm(self):
+        now = datetime.now()
+        seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+
+        # midnight to 12:15
         #
-        table = bs.find(lambda tag: tag.name == 'table' and tag.has_key('id') and tag['id'] == "gvIncidents")
+        if seconds_since_midnight < 1200:
+            return True
+        return False
 
-        if table is not None:
-            cnt = 0
-            rowIndex = -1  # first row is the header
-            rows = table.find_all(lambda tag: tag.name == 'tr')
-            for tr in rows:
-                cols = tr.findAll('td')
-                list = []
-                list.append(dispatchCenters[index])
-                for td in cols:
-                    text = ''.join(td.find(text=True))
-                    list.append(text)
-                    cnt += 1
-                if cnt:
-                    storeRecord(list, rowIndex)
-                rowIndex += 1
-    except Exception as e:
-        print e
-
-
-# parse the main html document
-#
-def parseDetails(doc, index, k):
-    details = ''
-    # Extract the data from html, if present
+    # IsNightTime
     #
-    bs = BeautifulSoup(doc, 'html.parser')
+    def isNightTime(self):
+        now = datetime.now()
+        seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
 
-    # Look for the gvIncidents table
-    #
-    table = bs.find(lambda tag: tag.name == 'table' and tag.has_key('id') and tag['id'] == "tblDetails")
-
-    if table is not None:
-        rows = table.find_all(lambda tag: tag.name == 'tr')
-        for tr in rows:
-            cols = tr.findAll('td')
-            for td in cols:
-                text = ''.join(td.find(text=True))
-                details += text
-            details += '\n'
-    storeDetails(details, index, k)
-
-
-# main loop
-#
-def extractData():
-    for index in range(len(dispatchCenters)):
-        payload['ddlcomcenter'] = dispatchCenters[index]
-        payload['__EVENTTARGET'] = ''
-        payload['__EVENTARGUMENT'] = ''
-
-        # reference the shared array here, clear it
+        # midnight to 6am
         #
-        global levelTwoLinks
-        levelTwoLinks = []
-
-        # Send a POST request to the url with the form data
-        #
-        try:
-            response = requests.post(url, payload)
-        except Exception as e:
-            print e.message
-            return
-
-        doc = response.text
-
-        try:
-            parseDom(doc, index)
-        except Exception as e:
-            print e
-            continue
-
-        # gather the secondary incident data, if any
-        #
-        payload['__EVENTTARGET'] = 'gvIncidents'
-
-        for k in range(len(levelTwoLinks)):
-            payload['__EVENTARGUMENT'] = levelTwoLinks[k]
-
-            # secondary post
-            #
-            s = requests.Session()
-            s.headers.update({'Referer': 'http://cad.chp.ca.gov/traffic.aspx'})
-            s.headers.update(
-                {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:32.0) Gecko/20100101 Firefox/32.0`'})
-            try:
-                response = requests.post(url, payload)
-            except Exception as e:
-                print e.message
-                return
-
-            doc = response.text
-            parseDetails(doc, index, k)
+        if seconds_since_midnight < 21600:
+            return True
+        return False
 
 
-# early am
-#
-def isEarlyAm():
-    now = datetime.now()
-    seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
-
-    # midnight to 12:15
-    #
-    if seconds_since_midnight < 1200:
-        return True
-    return False
-
-
-# IsNightTime
-#
-def isNightTime():
-    now = datetime.now()
-    seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
-
-    # midnight to 6am
-    #
-    if seconds_since_midnight < 21600:
-        return True
-    return False
-
-
-# main entry
-#
-if __name__ == '__main__':
+def main():
     # loop forever
     idx = 1
     getWeather = 0
     weather = Weather()
+    chp_logger = CHPLogger(weather)
     weather.update_stations()
     while 1:
         print("Getting data for iteration " + str(idx))
         try:
-            extractData()
+            chp_logger.extractData()
         except Exception as e:
             print e.message
         print("Start Delay")
-        if isNightTime():
+        if chp_logger.isNightTime():
             time.sleep(800)  # wait 15 minutes
         else:
             time.sleep(600)  # wait 10 minutes
-        fixupTime()
+        chp_logger.fixupTime()
         getWeather += 1
         if getWeather > 3:
             weather.update_stations()
             getWeather = 0
         idx += 1
+
+
+if __name__ == "__main__":
+    main()
