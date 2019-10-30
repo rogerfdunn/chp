@@ -130,6 +130,31 @@ class CHPLogger:
                 return item
         return area
 
+    def unicode_to_str(self, udata):
+        details = eval(udata)
+        details = details.replace('\\n', '\n')
+        return details
+
+    def merge_details(self, details, prev_details):
+        new_text = details.splitlines()
+        prev_text = prev_details.splitlines()
+        if new_text == prev_text:
+            return
+        new_details = []
+        for index in range(250):
+            st = "[{}]".format(index+1)
+            found = False
+            for line in new_text:
+                if line.find(st) >= 0:
+                    new_details.append(line)
+                    found = True
+            if not found:
+                for line in prev_text:
+                    if line.find(st) >= 0:
+                        new_details.append(line)
+        result = "\r\n".join(new_details)
+        return result
+
     def store_events(self, dispatch, data_dict):
 
         print "Processing {}".format(dispatch)
@@ -229,6 +254,13 @@ class CHPLogger:
                                                                                           details)
                         sql = sqla + values
                     else:
+                        sql = "SELECT DetailText from {} where dispatchcenter = '{}' and CHPIncidentID = '{}' limit 1".format(CHPLogger.INCIDENT_TABLE, callCenter, iid)
+                        cur.execute(sql)
+                        prev_details = ""
+                        for row in cur:
+                            prev_details = str(row[0])
+                        details = self.unicode_to_str(details)
+                        details = self.merge_details(details, prev_details)
                         sql = "UPDATE {} set DetailText = {}, endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
                             CHPLogger.INCIDENT_TABLE,
                             details, itype, callCenter, iid)
