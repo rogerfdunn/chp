@@ -143,15 +143,17 @@ class CHPLogger:
         new_details = []
         for index in range(250):
             st = "[{}]".format(index+1)
-            found = False
+            for oldline in prev_text:
+                if oldline.find(st) >= 0:
+                    new_details.append(oldline)
+                    break
+        for index in range(250):
+            st = "[{}]".format(index + 1)
             for line in new_text:
+                if line in new_details:
+                    break
                 if line.find(st) >= 0:
                     new_details.append(line)
-                    found = True
-            if not found:
-                for line in prev_text:
-                    if line.find(st) >= 0:
-                        new_details.append(line)
         result = "\r\n".join(new_details)
         return result
 
@@ -261,6 +263,7 @@ class CHPLogger:
                             prev_details = str(row[0])
                         details = self.unicode_to_str(details)
                         details = self.merge_details(details, prev_details)
+                        details = conn.escape(details)
                         sql = "UPDATE {} set DetailText = {}, endtime = NOW(), type='{}' where dispatchcenter = '{}' and CHPIncidentID = '{}'".format(
                             CHPLogger.INCIDENT_TABLE,
                             details, itype, callCenter, iid)
